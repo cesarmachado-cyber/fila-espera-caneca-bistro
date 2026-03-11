@@ -85,6 +85,18 @@ class TableRepository {
  * Serviço desacoplado para futura automação de notificações via WhatsApp.
  */
 class NotificationService {
+  buildManualWhatsAppCallLink(customer) {
+    const whatsappNumber = this.#formatWhatsAppNumber(customer.whatsapp);
+    const message = this.#buildCallMessage(customer.name);
+
+    return `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
+  }
+
+  openManualWhatsAppCall(customer) {
+    const link = this.buildManualWhatsAppCallLink(customer);
+    window.open(link, '_blank', 'noopener,noreferrer');
+  }
+
   notifyTableReleased() {
     // Placeholder: futuramente enviar webhook/trigger para WhatsApp.
   }
@@ -92,6 +104,15 @@ class NotificationService {
   notifyCustomerCalled({ customer, table, toleranceMinutes }) {
     // Placeholder: futuramente disparar template WhatsApp com mesa e tempo de tolerância.
     console.info('notifyCustomerCalled', { customerId: customer.id, tableId: table.id, toleranceMinutes });
+  }
+
+  #buildCallMessage(name) {
+    return `Olá, ${name}! Sua mesa no Caneca Bistrô já está pronta. Estamos te aguardando com carinho 😊`;
+  }
+
+  #formatWhatsAppNumber(phone) {
+    const digits = sanitizePhone(phone);
+    return digits.startsWith('55') ? digits : `55${digits}`;
   }
 }
 
@@ -323,7 +344,7 @@ const renderHostPanel = () => {
                 <small>Status: ${STATUS_LABELS[customer.status]}</small>
               </div>
               <div class="host-actions">
-                <button type="button" class="secondary-button" data-action="call-customer">Chamar cliente</button>
+                <button type="button" class="whatsapp-button" data-action="call-customer">Chamar no WhatsApp</button>
                 <button type="button" class="secondary-button" data-action="confirm-entry" ${isCalledForThisTable ? '' : 'disabled'}>Confirmar entrada</button>
                 <button type="button" class="danger-button" data-action="mark-no-show" ${isCalledForThisTable ? '' : 'disabled'}>Não compareceu</button>
                 <button type="button" class="danger-button" data-action="mark-canceled" ${isCalledForThisTable ? '' : 'disabled'}>Cancelado</button>
@@ -511,6 +532,7 @@ const handleHostPanelInteraction = (event) => {
 
     tableRepository.update(tableId, { currentCustomerId: customerId });
     notificationService.notifyCustomerCalled({ customer, table, toleranceMinutes });
+    notificationService.openManualWhatsAppCall(customer);
     renderAll();
     return;
   }
