@@ -32,23 +32,163 @@ const WAITLIST_STATUS_OPTIONS = Object.values(WAITLIST_STATUS);
 const TABLE_STATUS_OPTIONS = Object.values(TABLE_STATUS);
 const DEFAULT_CALL_TOLERANCE_MINUTES = 10;
 
-/**
- * Repositório isolado para facilitar migração futura para Supabase.
- * Basta manter a mesma assinatura pública dos métodos.
- */
+const appConfig = window.__APP_CONFIG__ || {};
+
+class SupabaseRestClient {
+  #baseUrl;
+
+  #anonKey;
+
+  constructor({ supabaseUrl, supabaseAnonKey }) {
+    this.#baseUrl = supabaseUrl ? `${supabaseUrl.replace(/\/+$/, '')}/rest/v1` : '';
+    this.#anonKey = supabaseAnonKey || '';
+  }
+
+  get isConfigured() {
+    return Boolean(this.#baseUrl && this.#anonKey);
+  }
+
+  async select(table) {
+    const response = await this.#request(`/${table}?select=*`);
+    return response.json();
+  }
+
+  async insert(table, payload) {
+    const response = await this.#request(`/${table}`, {
+      method: 'POST',
+      headers: {
+        Prefer: 'return=representation'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const rows = await response.json();
+    return rows[0];
+  }
+
+  async update(table, id, payload) {
+    const response = await this.#request(`/${table}?id=eq.${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: {
+        Prefer: 'return=representation'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const rows = await response.json();
+    return rows[0];
+  }
+
+  async #request(path, init = {}) {
+    if (!this.isConfigured) {
+      throw new Error('Supabase não configurado.');
+    }
+
+    const response = await fetch(`${this.#baseUrl}${path}`, {
+      ...init,
+      headers: {
+        apikey: this.#anonKey,
+        Authorization: `Bearer ${this.#anonKey}`,
+        'Content-Type': 'application/json',
+        ...(init.headers || {})
+      }
+    });
+
+    if (!response.ok) {
+      const reason = await response.text();
+      throw new Error(`Erro Supabase (${response.status}): ${reason}`);
+    }
+
+    return response;
+  }
+}
+
 class WaitlistRepository {
   #customers = [];
+
+  #supabase;
+
+  constructor(supabase) {
+    this.#supabase = supabase;
+  }
 
   list() {
     return [...this.#customers];
   }
 
-  create(customer) {
-    this.#customers.push(customer);
-    return customer;
+  async load() {
+    if (!this.#supabase.isConfigured) {
+      this.#customers = [];
+      return;
+    }
+
+    const rows = await this.#supabase.select('waitlist_customers');
+    this.#customers = rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      whatsapp: row.whatsapp,
+      partySize: row.party_size,
+      notes: row.notes || '',
+      status: row.status,
+      assignedTableId: row.assigned_table_id,
+      calledAt: row.called_at,
+      toleranceMinutes: row.tolerance_minutes,
+      createdAt: row.created_at
+    }));
   }
 
-  update(customerId, patch) {
+  async create(customer) {
+    if (!this.#supabase.isConfigured) {
+      this.#customers.push(customer);
+      return customer;
+    }
+
+    const row = await this.#supabase.insert('waitlist_customers', {
+      id: customer.id,
+      name: customer.name,
+      whatsapp: customer.whatsapp,
+      party_size: customer.partySize,
+      notes: customer.notes,
+      status: customer.status,
+      assigned_table_id: customer.assignedTableId,
+      called_at: customer.calledAt,
+      tolerance_minutes: customer.toleranceMinutes,
+      created_at: customer.createdAt
+    });
+
+    const normalized = {
+      id: row.id,
+      name: row.name,
+      whatsapp: row.whatsapp,
+      partySize: row.party_size,
+      notes: row.notes || '',
+      status: row.status,
+      assignedTableId: row.assigned_table_id,
+      calledAt: row.called_at,
+      toleranceMinutes: row.tolerance_minutes,
+      createdAt: row.created_at
+    };
+
+    this.#customers.push(normalized);
+    return normalized;
+  }
+
+  async update(customerId, patch) {
+    const payload = {
+      ...(Object.hasOwn(patch, 'name') ? { name: patch.name } : {}),
+      ...(Object.hasOwn(patch, 'whatsapp') ? { whatsapp: patch.whatsapp } : {}),
+      ...(Object.hasOwn(patch, 'partySize') ? { party_size: patch.partySize } : {}),
+      ...(Object.hasOwn(patch, 'notes') ? { notes: patch.notes } : {}),
+      ...(Object.hasOwn(patch, 'status') ? { status: patch.status } : {}),
+      ...(Object.hasOwn(patch, 'assignedTableId') ? { assigned_table_id: patch.assignedTableId } : {}),
+      ...(Object.hasOwn(patch, 'calledAt') ? { called_at: patch.calledAt } : {}),
+      ...(Object.hasOwn(patch, 'toleranceMinutes') ? { tolerance_minutes: patch.toleranceMinutes } : {})
+    };
+
+    if (this.#supabase.isConfigured) {
+      await this.#supabase.update('waitlist_customers', customerId, payload);
+    }
+
     this.#customers = this.#customers.map((customer) => (
       customer.id === customerId
         ? { ...customer, ...patch }
@@ -57,22 +197,76 @@ class WaitlistRepository {
   }
 }
 
-/**
- * Estrutura preparada para integração futura com Supabase e sincronização entre atendentes.
- */
 class TableRepository {
   #tables = [];
+
+  #supabase;
+
+  constructor(supabase) {
+    this.#supabase = supabase;
+  }
 
   list() {
     return [...this.#tables];
   }
 
-  create(table) {
-    this.#tables.push(table);
-    return table;
+  async load() {
+    if (!this.#supabase.isConfigured) {
+      this.#tables = [];
+      return;
+    }
+
+    const rows = await this.#supabase.select('tables');
+    this.#tables = rows.map((row) => ({
+      id: row.id,
+      label: row.label,
+      capacity: row.capacity,
+      status: row.status,
+      currentCustomerId: row.current_customer_id,
+      createdAt: row.created_at
+    }));
   }
 
-  update(tableId, patch) {
+  async create(table) {
+    if (!this.#supabase.isConfigured) {
+      this.#tables.push(table);
+      return table;
+    }
+
+    const row = await this.#supabase.insert('tables', {
+      id: table.id,
+      label: table.label,
+      capacity: table.capacity,
+      status: table.status,
+      current_customer_id: table.currentCustomerId,
+      created_at: table.createdAt
+    });
+
+    const normalized = {
+      id: row.id,
+      label: row.label,
+      capacity: row.capacity,
+      status: row.status,
+      currentCustomerId: row.current_customer_id,
+      createdAt: row.created_at
+    };
+
+    this.#tables.push(normalized);
+    return normalized;
+  }
+
+  async update(tableId, patch) {
+    const payload = {
+      ...(Object.hasOwn(patch, 'label') ? { label: patch.label } : {}),
+      ...(Object.hasOwn(patch, 'capacity') ? { capacity: patch.capacity } : {}),
+      ...(Object.hasOwn(patch, 'status') ? { status: patch.status } : {}),
+      ...(Object.hasOwn(patch, 'currentCustomerId') ? { current_customer_id: patch.currentCustomerId } : {})
+    };
+
+    if (this.#supabase.isConfigured) {
+      await this.#supabase.update('tables', tableId, payload);
+    }
+
     this.#tables = this.#tables.map((table) => (
       table.id === tableId
         ? { ...table, ...patch }
@@ -81,9 +275,6 @@ class TableRepository {
   }
 }
 
-/**
- * Serviço desacoplado para futura automação de notificações via WhatsApp.
- */
 class NotificationService {
   buildManualWhatsAppCallLink(customer) {
     const whatsappNumber = this.#formatWhatsAppNumber(customer.whatsapp);
@@ -98,11 +289,10 @@ class NotificationService {
   }
 
   notifyTableReleased() {
-    // Placeholder: futuramente enviar webhook/trigger para WhatsApp.
+    console.info('notifyTableReleased');
   }
 
   notifyCustomerCalled({ customer, table, toleranceMinutes }) {
-    // Placeholder: futuramente disparar template WhatsApp com mesa e tempo de tolerância.
     console.info('notifyCustomerCalled', { customerId: customer.id, tableId: table.id, toleranceMinutes });
   }
 
@@ -116,8 +306,13 @@ class NotificationService {
   }
 }
 
-const waitlistRepository = new WaitlistRepository();
-const tableRepository = new TableRepository();
+const supabaseClient = new SupabaseRestClient({
+  supabaseUrl: appConfig.supabaseUrl,
+  supabaseAnonKey: appConfig.supabaseAnonKey
+});
+
+const waitlistRepository = new WaitlistRepository(supabaseClient);
+const tableRepository = new TableRepository(supabaseClient);
 const notificationService = new NotificationService();
 
 const elements = {
@@ -408,7 +603,7 @@ const validateTableData = ({ label, capacity, status }) => {
   return null;
 };
 
-const handleWaitlistSubmit = (event) => {
+const handleWaitlistSubmit = async (event) => {
   event.preventDefault();
 
   const formData = new FormData(elements.waitlistForm);
@@ -426,14 +621,18 @@ const handleWaitlistSubmit = (event) => {
     return;
   }
 
-  const customer = waitlistRepository.create(createCustomer(payload));
-
-  setFeedback(elements.waitlistFeedback, `Cliente ${customer.name} adicionado(a) à fila com sucesso.`);
-  elements.waitlistForm.reset();
-  renderAll();
+  try {
+    const customer = await waitlistRepository.create(createCustomer(payload));
+    setFeedback(elements.waitlistFeedback, `Cliente ${customer.name} adicionado(a) à fila com sucesso.`);
+    elements.waitlistForm.reset();
+    renderAll();
+  } catch (error) {
+    setFeedback(elements.waitlistFeedback, 'Erro ao salvar cliente. Verifique a conexão com o Supabase.', true);
+    console.error(error);
+  }
 };
 
-const handleTableSubmit = (event) => {
+const handleTableSubmit = async (event) => {
   event.preventDefault();
 
   const formData = new FormData(elements.tableForm);
@@ -450,15 +649,19 @@ const handleTableSubmit = (event) => {
     return;
   }
 
-  const table = tableRepository.create(createTable(payload));
-
-  setFeedback(elements.tableFeedback, `${table.label} cadastrada com sucesso.`);
-  elements.tableForm.reset();
-  elements.tableForm.status.value = TABLE_STATUS.DISPONIVEL;
-  renderAll();
+  try {
+    const table = await tableRepository.create(createTable(payload));
+    setFeedback(elements.tableFeedback, `${table.label} cadastrada com sucesso.`);
+    elements.tableForm.reset();
+    elements.tableForm.status.value = TABLE_STATUS.DISPONIVEL;
+    renderAll();
+  } catch (error) {
+    setFeedback(elements.tableFeedback, 'Erro ao salvar mesa. Verifique a conexão com o Supabase.', true);
+    console.error(error);
+  }
 };
 
-const handleQueueInteraction = (event) => {
+const handleQueueInteraction = async (event) => {
   const target = event.target;
 
   if (!(target instanceof HTMLSelectElement) || target.dataset.action !== 'update-customer-status') {
@@ -471,11 +674,16 @@ const handleQueueInteraction = (event) => {
     return;
   }
 
-  waitlistRepository.update(listItem.dataset.id, { status: target.value });
-  renderAll();
+  try {
+    await waitlistRepository.update(listItem.dataset.id, { status: target.value });
+    renderAll();
+  } catch (error) {
+    console.error(error);
+    renderAll();
+  }
 };
 
-const handleTableInteraction = (event) => {
+const handleTableInteraction = async (event) => {
   const target = event.target;
   const listItem = target instanceof HTMLElement ? target.closest('.table-item') : null;
 
@@ -486,19 +694,29 @@ const handleTableInteraction = (event) => {
   const tableId = listItem.dataset.id;
 
   if (target instanceof HTMLSelectElement && target.dataset.action === 'update-table-status') {
-    tableRepository.update(tableId, { status: target.value });
-    renderAll();
+    try {
+      await tableRepository.update(tableId, { status: target.value });
+      renderAll();
+    } catch (error) {
+      console.error(error);
+      renderAll();
+    }
     return;
   }
 
   if (target instanceof HTMLButtonElement && target.dataset.action === 'mark-released') {
-    tableRepository.update(tableId, { status: TABLE_STATUS.DISPONIVEL, currentCustomerId: null });
-    notificationService.notifyTableReleased(tableId);
-    renderAll();
+    try {
+      await tableRepository.update(tableId, { status: TABLE_STATUS.DISPONIVEL, currentCustomerId: null });
+      notificationService.notifyTableReleased(tableId);
+      renderAll();
+    } catch (error) {
+      console.error(error);
+      renderAll();
+    }
   }
 };
 
-const handleHostPanelInteraction = (event) => {
+const handleHostPanelInteraction = async (event) => {
   const target = event.target;
 
   if (!(target instanceof HTMLButtonElement) || !target.dataset.action) {
@@ -520,45 +738,50 @@ const handleHostPanelInteraction = (event) => {
     return;
   }
 
-  if (target.dataset.action === 'call-customer') {
-    const toleranceMinutes = getToleranceMinutes();
+  try {
+    if (target.dataset.action === 'call-customer') {
+      const toleranceMinutes = getToleranceMinutes();
 
-    waitlistRepository.update(customerId, {
-      status: WAITLIST_STATUS.CHAMADO,
-      assignedTableId: tableId,
-      calledAt: new Date().toISOString(),
-      toleranceMinutes
-    });
+      await waitlistRepository.update(customerId, {
+        status: WAITLIST_STATUS.CHAMADO,
+        assignedTableId: tableId,
+        calledAt: new Date().toISOString(),
+        toleranceMinutes
+      });
 
-    tableRepository.update(tableId, { currentCustomerId: customerId });
-    notificationService.notifyCustomerCalled({ customer, table, toleranceMinutes });
-    notificationService.openManualWhatsAppCall(customer);
-    renderAll();
-    return;
-  }
+      await tableRepository.update(tableId, { currentCustomerId: customerId });
+      notificationService.notifyCustomerCalled({ customer, table, toleranceMinutes });
+      notificationService.openManualWhatsAppCall(customer);
+      renderAll();
+      return;
+    }
 
-  if (target.dataset.action === 'confirm-entry') {
-    waitlistRepository.update(customerId, { status: WAITLIST_STATUS.ENTROU });
-    tableRepository.update(tableId, { status: TABLE_STATUS.OCUPADA, currentCustomerId: customerId });
-    renderAll();
-    return;
-  }
+    if (target.dataset.action === 'confirm-entry') {
+      await waitlistRepository.update(customerId, { status: WAITLIST_STATUS.ENTROU });
+      await tableRepository.update(tableId, { status: TABLE_STATUS.OCUPADA, currentCustomerId: customerId });
+      renderAll();
+      return;
+    }
 
-  if (target.dataset.action === 'mark-no-show') {
-    waitlistRepository.update(customerId, { status: WAITLIST_STATUS.NAO_COMPARECEU, assignedTableId: null, calledAt: null });
-    tableRepository.update(tableId, { currentCustomerId: null });
-    renderAll();
-    return;
-  }
+    if (target.dataset.action === 'mark-no-show') {
+      await waitlistRepository.update(customerId, { status: WAITLIST_STATUS.NAO_COMPARECEU, assignedTableId: null, calledAt: null });
+      await tableRepository.update(tableId, { currentCustomerId: null });
+      renderAll();
+      return;
+    }
 
-  if (target.dataset.action === 'mark-canceled') {
-    waitlistRepository.update(customerId, { status: WAITLIST_STATUS.CANCELADO, assignedTableId: null, calledAt: null });
-    tableRepository.update(tableId, { currentCustomerId: null });
+    if (target.dataset.action === 'mark-canceled') {
+      await waitlistRepository.update(customerId, { status: WAITLIST_STATUS.CANCELADO, assignedTableId: null, calledAt: null });
+      await tableRepository.update(tableId, { currentCustomerId: null });
+      renderAll();
+    }
+  } catch (error) {
+    console.error(error);
     renderAll();
   }
 };
 
-const initialize = () => {
+const initialize = async () => {
   elements.waitlistForm.addEventListener('submit', handleWaitlistSubmit);
   elements.tableForm.addEventListener('submit', handleTableSubmit);
   elements.queueList.addEventListener('change', handleQueueInteraction);
@@ -568,7 +791,19 @@ const initialize = () => {
 
   elements.tableForm.status.value = TABLE_STATUS.DISPONIVEL;
   elements.callToleranceInput.value = String(DEFAULT_CALL_TOLERANCE_MINUTES);
-  renderAll();
+
+  if (!supabaseClient.isConfigured) {
+    setFeedback(elements.waitlistFeedback, 'Supabase não configurado. Operando em modo local temporário.', true);
+  }
+
+  try {
+    await Promise.all([waitlistRepository.load(), tableRepository.load()]);
+    renderAll();
+  } catch (error) {
+    console.error(error);
+    setFeedback(elements.waitlistFeedback, 'Falha ao carregar dados persistidos do Supabase.', true);
+    renderAll();
+  }
 };
 
 initialize();
