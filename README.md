@@ -1,72 +1,115 @@
 # Fila de Espera - Caneca Bistrô
 
-Este repositório foi ajustado para evitar falhas de instalação (`npm install`) em ambientes com restrições de proxy/registro e permitir subir a aplicação com `npm run dev` sem depender de pacotes externos.
+Aplicação web para gestão da fila de espera e operação de mesas do Caneca Bistrô, agora com persistência real em Supabase (clientes, mesas e status operacionais).
 
-## O que foi corrigido
+## Funcionalidades desta etapa
 
-- `package.json` simplificado para remover dependências externas que causavam bloqueio `403 Forbidden` no registro npm.
-- `.npmrc` padronizado para usar o registro oficial e reduzir ruído de auditoria/funding em CI.
-- `package-lock.json` regenerado para refletir a configuração atual e garantir instalação determinística.
-- Servidor de desenvolvimento local criado em `scripts/dev-server.mjs` usando apenas módulos nativos do Node.
+- Integração com Supabase via API REST.
+- Persistência de clientes da fila (`waitlist_customers`).
+- Persistência de mesas (`tables`).
+- Persistência de status dos clientes (aguardando/chamado/entrou/não compareceu/cancelado).
+- Persistência de status das mesas (disponível/ocupada/liberando/reservada).
+- Compatibilidade mantida com a interface atual (sem mudanças de fluxo para atendimento).
 
 ## Pré-requisitos
 
-- Node.js 18.18+ (recomendado Node 20+)
+- Node.js 18.18+
 - npm 9+
+- Projeto e banco no Supabase
 
-## Instalação local
+## Instalação
 
 ```bash
 npm install
 ```
 
-## Execução em desenvolvimento
+## Configuração do Supabase
+
+Defina variáveis de ambiente antes de iniciar a aplicação:
+
+```bash
+export SUPABASE_URL="https://SEU-PROJETO.supabase.co"
+export SUPABASE_ANON_KEY="SUA_CHAVE_ANON"
+```
+
+Também é possível definir `HOST` e `PORT`:
+
+```bash
+export HOST="0.0.0.0"
+export PORT="5173"
+```
+
+> O servidor injeta essas variáveis no frontend através da rota `/app-config.js`.
+
+### Estrutura SQL sugerida
+
+Execute no SQL Editor do Supabase:
+
+```sql
+create table if not exists public.waitlist_customers (
+  id uuid primary key,
+  name text not null,
+  whatsapp text not null,
+  party_size integer not null check (party_size > 0),
+  notes text,
+  status text not null check (status in ('aguardando', 'chamado', 'entrou', 'nao_compareceu', 'cancelado')),
+  assigned_table_id uuid,
+  called_at timestamptz,
+  tolerance_minutes integer,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.tables (
+  id uuid primary key,
+  label text not null,
+  capacity integer not null check (capacity > 0),
+  status text not null check (status in ('ocupada', 'disponivel', 'liberando', 'reservada')),
+  current_customer_id uuid,
+  created_at timestamptz not null default now()
+);
+```
+
+### Políticas (RLS)
+
+Para ambiente interno simples de operação, você pode liberar acesso anônimo de leitura/escrita:
+
+```sql
+alter table public.waitlist_customers enable row level security;
+alter table public.tables enable row level security;
+
+create policy "anon full access waitlist_customers"
+on public.waitlist_customers
+for all
+using (true)
+with check (true);
+
+create policy "anon full access tables"
+on public.tables
+for all
+using (true)
+with check (true);
+```
+
+> Em produção, ajuste políticas para o nível de segurança desejado.
+
+## Execução
 
 ```bash
 npm run dev
 ```
 
-A aplicação ficará disponível em `http://localhost:5173`.
+Aplicação disponível em `http://localhost:5173`.
 
-## Testes rápidos locais
-
-1. Verifique sintaxe do servidor:
+## Verificações rápidas
 
 ```bash
 npm run check
-```
-
-2. Suba o servidor e valide resposta HTTP:
-
-```bash
 npm run dev
 # em outro terminal
 curl -I http://127.0.0.1:5173/
+curl http://127.0.0.1:5173/app-config.js
 ```
 
-Esperado: status `HTTP/1.1 200 OK`.
+## Observação de fallback
 
-## Preparo para deploy
-
-Como o projeto agora é um app estático servido por Node nativo:
-
-1. Defina variáveis de ambiente no host/plataforma:
-   - `HOST=0.0.0.0`
-   - `PORT` conforme porta fornecida pelo provedor (ex.: Render, Railway, Fly.io, VPS).
-2. Comando de instalação:
-
-```bash
-npm ci
-```
-
-3. Comando de inicialização:
-
-```bash
-npm start
-```
-
-4. Configure health check para `GET /` e espere `200`.
-
-## Observações sobre ambientes com proxy
-
-Se o ambiente injeta automaticamente `HTTP_PROXY`/`HTTPS_PROXY` e você ainda vir erro 403 ao baixar pacotes, isso indica bloqueio de egress no proxy corporativo. Neste cenário, use um registro interno permitido (Nexus/Artifactory/Verdaccio) ou peça liberação de saída para `registry.npmjs.org`.
+Se `SUPABASE_URL` e `SUPABASE_ANON_KEY` não forem definidas, a aplicação continua funcionando em modo local temporário (dados em memória durante a sessão).

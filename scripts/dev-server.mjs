@@ -20,6 +20,18 @@ const contentTypes = {
 
 const server = createServer(async (req, res) => {
   const urlPath = (req.url ?? '/').split('?')[0];
+
+  if (urlPath === '/app-config.js') {
+    const config = {
+      supabaseUrl: process.env.SUPABASE_URL ?? '',
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY ?? '',
+    };
+
+    res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
+    res.end(`window.__APP_CONFIG__ = ${JSON.stringify(config)};`);
+    return;
+  }
+
   const cleanPath = urlPath === '/' ? '/index.html' : urlPath;
   const filePath = normalize(join(publicDir, cleanPath));
 
