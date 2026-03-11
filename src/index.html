@@ -11,7 +11,7 @@
       <header class="app-header">
         <p class="eyebrow">Caneca Bistrô</p>
         <h1>Gestão da Fila de Espera</h1>
-        <p class="subtitle">Cadastre clientes, acompanhe status e mantenha o atendimento organizado.</p>
+        <p class="subtitle">Cadastre clientes, acompanhe o salão e organize o encaixe de mesas com agilidade.</p>
       </header>
 
       <section class="card" aria-labelledby="cadastro-cliente-titulo">
@@ -60,6 +60,66 @@
         </div>
 
         <ul id="queue-list" class="queue-list" aria-live="polite"></ul>
+      </section>
+
+      <section class="card" aria-labelledby="cadastro-mesa-titulo">
+        <div class="card-header">
+          <h2 id="cadastro-mesa-titulo">Cadastro de mesas</h2>
+          <p>Registre número/nome, capacidade e status atual da mesa.</p>
+        </div>
+
+        <form id="table-form" class="waitlist-form" novalidate>
+          <div class="form-grid">
+            <label class="field">
+              <span>Nome ou número da mesa</span>
+              <input type="text" name="label" required placeholder="Ex.: Mesa 12 / Janela" />
+            </label>
+
+            <label class="field">
+              <span>Capacidade</span>
+              <input type="number" name="capacity" min="1" required placeholder="Ex.: 4" />
+            </label>
+
+            <label class="field field-full">
+              <span>Status</span>
+              <select name="status" required>
+                <option value="disponivel">Disponível</option>
+                <option value="ocupada">Ocupada</option>
+                <option value="liberando">Liberando</option>
+                <option value="reservada">Reservada</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="form-footer">
+            <p id="table-feedback" class="feedback" role="status" aria-live="polite"></p>
+            <button type="submit" class="primary-button">Cadastrar mesa</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="mesas-titulo">
+        <div class="card-header card-header-inline">
+          <div>
+            <h2 id="mesas-titulo">Operação de mesas</h2>
+            <p>Qualquer atendente pode atualizar status e marcar mesa liberada em um clique.</p>
+          </div>
+          <span id="table-counter" class="badge" aria-live="polite">0 mesas</span>
+        </div>
+
+        <ul id="table-list" class="table-list" aria-live="polite"></ul>
+      </section>
+
+      <section class="card" aria-labelledby="painel-host-titulo">
+        <div class="card-header card-header-inline">
+          <div>
+            <h2 id="painel-host-titulo">Painel da host</h2>
+            <p>Visualize mesas disponíveis e as melhores sugestões da fila por capacidade.</p>
+          </div>
+          <span id="available-counter" class="badge" aria-live="polite">0 disponíveis</span>
+        </div>
+
+        <div id="host-panel" class="host-panel" aria-live="polite"></div>
       </section>
     </main>
 
