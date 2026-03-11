@@ -2,6 +2,39 @@
 
 Aplicação web para gestão da fila de espera e operação de mesas do Caneca Bistrô, agora com persistência real em Supabase (clientes, mesas e status operacionais).
 
+## Deploy mais simples na Vercel (sem rodar localmente)
+
+### 1) Publicar o app
+
+1. Suba este projeto para um repositório no GitHub.
+2. Acesse [vercel.com](https://vercel.com) e clique em **Add New > Project**.
+3. Importe o repositório `fila-espera-caneca-bistro`.
+4. Em **Framework Preset**, selecione **Other** (ou deixe autodetectado).
+5. Clique em **Deploy**.
+
+> Este repositório já inclui `vercel.json` com roteamento para servir os arquivos em `src/` e expor `/app-config.js` via função serverless.
+
+### 2) Configurar as variáveis de ambiente
+
+No painel do projeto na Vercel:
+
+1. Vá em **Settings > Environment Variables**.
+2. Cadastre as variáveis abaixo em **Production** (e opcionalmente Preview/Development):
+
+```
+SUPABASE_URL=https://tumumdcafluvuvhrjmtk.supabase.co
+SUPABASE_ANON_KEY=sb_publishable_VMtIt2rUVhwss3frjiliUw_Mi8l8h6h
+```
+
+3. Clique em **Save**.
+4. Vá em **Deployments** e clique em **Redeploy** no último deploy para aplicar as variáveis.
+
+### 3) Conectar ao Supabase já criado
+
+Com as variáveis acima salvas, a rota `/app-config.js` passa a injetar automaticamente as credenciais no frontend, e o app começa a usar seu projeto Supabase existente (tabelas `waitlist_customers` e `tables`).
+
+Se ainda não criou as tabelas/policies, execute o SQL da seção **Estrutura SQL sugerida** e **Políticas (RLS)** abaixo no SQL Editor do Supabase.
+
 ## Funcionalidades desta etapa
 
 - Integração com Supabase via API REST.
