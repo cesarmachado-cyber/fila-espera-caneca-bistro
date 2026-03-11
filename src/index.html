@@ -7,9 +7,62 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <main>
-      <h1>Fila de Espera - Caneca Bistrô</h1>
-      <p>Ambiente pronto para evolução da aplicação.</p>
+    <main class="app-shell">
+      <header class="app-header">
+        <p class="eyebrow">Caneca Bistrô</p>
+        <h1>Gestão da Fila de Espera</h1>
+        <p class="subtitle">Cadastre clientes, acompanhe status e mantenha o atendimento organizado.</p>
+      </header>
+
+      <section class="card" aria-labelledby="cadastro-cliente-titulo">
+        <div class="card-header">
+          <h2 id="cadastro-cliente-titulo">Cadastro de cliente</h2>
+          <p>Preencha os dados para incluir na fila atual.</p>
+        </div>
+
+        <form id="waitlist-form" class="waitlist-form" novalidate>
+          <div class="form-grid">
+            <label class="field">
+              <span>Nome</span>
+              <input type="text" name="name" required placeholder="Ex.: Ana Souza" autocomplete="name" />
+            </label>
+
+            <label class="field">
+              <span>WhatsApp</span>
+              <input type="tel" name="whatsapp" required placeholder="(11) 99999-9999" autocomplete="tel" />
+            </label>
+
+            <label class="field">
+              <span>Quantidade de pessoas</span>
+              <input type="number" name="partySize" min="1" required placeholder="Ex.: 4" />
+            </label>
+
+            <label class="field field-full">
+              <span>Observações</span>
+              <textarea name="notes" rows="3" placeholder="Preferência de mesa, restrição alimentar, aniversário etc."></textarea>
+            </label>
+          </div>
+
+          <div class="form-footer">
+            <p id="form-feedback" class="feedback" role="status" aria-live="polite"></p>
+            <button type="submit" class="primary-button">Adicionar cliente à fila</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="fila-titulo">
+        <div class="card-header card-header-inline">
+          <div>
+            <h2 id="fila-titulo">Clientes aguardando</h2>
+            <p>Atualize o status conforme o atendimento evolui.</p>
+          </div>
+          <span id="queue-counter" class="badge" aria-live="polite">0 clientes</span>
+        </div>
+
+        <ul id="queue-list" class="queue-list" aria-live="polite"></ul>
+      </section>
     </main>
+
+    <script src="/waitlist.js" defer></script>
   </body>
 </html>
