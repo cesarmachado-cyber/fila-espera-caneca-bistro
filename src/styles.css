@@ -175,6 +175,7 @@ textarea {
 
 .primary-button,
 .secondary-button,
+.whatsapp-button,
 .danger-button {
   border: none;
   border-radius: 999px;
@@ -195,6 +196,11 @@ textarea {
   color: var(--accent);
 }
 
+.whatsapp-button {
+  background: linear-gradient(135deg, #2fc161, #1da851);
+  color: #fff;
+}
+
 .danger-button {
   background: #f8dedd;
   color: #9a1e1e;
@@ -202,6 +208,7 @@ textarea {
 
 .primary-button:hover,
 .secondary-button:hover,
+.whatsapp-button:hover,
 .danger-button:hover {
   transform: translateY(-1px);
   filter: brightness(1.06);
@@ -209,6 +216,7 @@ textarea {
 
 .primary-button:disabled,
 .secondary-button:disabled,
+.whatsapp-button:disabled,
 .danger-button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
