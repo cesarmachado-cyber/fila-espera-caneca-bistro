@@ -174,7 +174,8 @@ textarea {
 }
 
 .primary-button,
-.secondary-button {
+.secondary-button,
+.danger-button {
   border: none;
   border-radius: 999px;
   font-weight: 700;
@@ -194,10 +195,24 @@ textarea {
   color: var(--accent);
 }
 
+.danger-button {
+  background: #f8dedd;
+  color: #9a1e1e;
+}
+
 .primary-button:hover,
-.secondary-button:hover {
+.secondary-button:hover,
+.danger-button:hover {
   transform: translateY(-1px);
   filter: brightness(1.06);
+}
+
+.primary-button:disabled,
+.secondary-button:disabled,
+.danger-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .queue-list,
@@ -233,7 +248,8 @@ textarea {
 .queue-item-main p,
 .table-item-main p,
 .host-table p,
-.suggestion-empty {
+.suggestion-empty,
+.host-hint {
   color: var(--text-muted);
 }
 
@@ -296,6 +312,22 @@ textarea {
   min-width: 220px;
 }
 
+.host-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: end;
+  padding: 10px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: var(--surface-muted);
+}
+
+.tolerance-field {
+  max-width: 240px;
+}
+
 .host-panel {
   display: grid;
   gap: 12px;
@@ -321,14 +353,30 @@ textarea {
 }
 
 .suggestion-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
   background: #fff;
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 12px;
   font-size: 0.9rem;
+}
+
+.suggestion-content {
+  display: grid;
+  gap: 2px;
+}
+
+.host-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.host-actions button {
+  padding: 9px 12px;
+  font-size: 0.82rem;
 }
 
 .table-empty,
@@ -345,12 +393,15 @@ textarea {
 @media (max-width: 860px) {
   .queue-item,
   .table-item,
-  .form-grid {
+  .form-grid,
+  .suggestion-item {
     grid-template-columns: 1fr;
   }
 
-  .table-actions {
+  .table-actions,
+  .host-actions {
     min-width: 0;
+    grid-template-columns: 1fr;
   }
 }
 
@@ -360,8 +411,13 @@ textarea {
     gap: 10px;
   }
 
-  .form-footer {
+  .form-footer,
+  .host-controls {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .tolerance-field {
+    max-width: none;
   }
 }

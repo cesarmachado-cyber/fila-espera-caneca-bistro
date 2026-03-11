@@ -114,9 +114,17 @@
         <div class="card-header card-header-inline">
           <div>
             <h2 id="painel-host-titulo">Painel da host</h2>
-            <p>Visualize mesas disponíveis e as melhores sugestões da fila por capacidade.</p>
+            <p>Chame clientes sugeridos, confirme entrada e trate ausências de forma rápida.</p>
           </div>
           <span id="available-counter" class="badge" aria-live="polite">0 disponíveis</span>
+        </div>
+
+        <div class="host-controls">
+          <label class="field tolerance-field" for="call-tolerance">
+            <span>Tolerância após chamada (min)</span>
+            <input id="call-tolerance" type="number" min="1" max="60" value="10" />
+          </label>
+          <p class="host-hint">Estrutura pronta para disparo de confirmação via WhatsApp e persistência no Supabase.</p>
         </div>
 
         <div id="host-panel" class="host-panel" aria-live="polite"></div>

@@ -2,6 +2,7 @@ const WAITLIST_STATUS = {
   AGUARDANDO: 'aguardando',
   CHAMADO: 'chamado',
   ENTROU: 'entrou',
+  NAO_COMPARECEU: 'nao_compareceu',
   CANCELADO: 'cancelado'
 };
 
@@ -16,6 +17,7 @@ const STATUS_LABELS = {
   [WAITLIST_STATUS.AGUARDANDO]: 'Aguardando',
   [WAITLIST_STATUS.CHAMADO]: 'Chamado',
   [WAITLIST_STATUS.ENTROU]: 'Entrou',
+  [WAITLIST_STATUS.NAO_COMPARECEU]: 'Não compareceu',
   [WAITLIST_STATUS.CANCELADO]: 'Cancelado'
 };
 
@@ -28,6 +30,7 @@ const TABLE_STATUS_LABELS = {
 
 const WAITLIST_STATUS_OPTIONS = Object.values(WAITLIST_STATUS);
 const TABLE_STATUS_OPTIONS = Object.values(TABLE_STATUS);
+const DEFAULT_CALL_TOLERANCE_MINUTES = 10;
 
 /**
  * Repositório isolado para facilitar migração futura para Supabase.
@@ -45,10 +48,10 @@ class WaitlistRepository {
     return customer;
   }
 
-  updateStatus(customerId, status) {
+  update(customerId, patch) {
     this.#customers = this.#customers.map((customer) => (
       customer.id === customerId
-        ? { ...customer, status }
+        ? { ...customer, ...patch }
         : customer
     ));
   }
@@ -69,10 +72,10 @@ class TableRepository {
     return table;
   }
 
-  updateStatus(tableId, status) {
+  update(tableId, patch) {
     this.#tables = this.#tables.map((table) => (
       table.id === tableId
-        ? { ...table, status }
+        ? { ...table, ...patch }
         : table
     ));
   }
@@ -84,6 +87,11 @@ class TableRepository {
 class NotificationService {
   notifyTableReleased() {
     // Placeholder: futuramente enviar webhook/trigger para WhatsApp.
+  }
+
+  notifyCustomerCalled({ customer, table, toleranceMinutes }) {
+    // Placeholder: futuramente disparar template WhatsApp com mesa e tempo de tolerância.
+    console.info('notifyCustomerCalled', { customerId: customer.id, tableId: table.id, toleranceMinutes });
   }
 }
 
@@ -101,7 +109,8 @@ const elements = {
   tableList: document.querySelector('#table-list'),
   tableCounter: document.querySelector('#table-counter'),
   hostPanel: document.querySelector('#host-panel'),
-  availableCounter: document.querySelector('#available-counter')
+  availableCounter: document.querySelector('#available-counter'),
+  callToleranceInput: document.querySelector('#call-tolerance')
 };
 
 const createCustomer = ({ name, whatsapp, partySize, notes }) => ({
@@ -111,6 +120,9 @@ const createCustomer = ({ name, whatsapp, partySize, notes }) => ({
   partySize,
   notes,
   status: WAITLIST_STATUS.AGUARDANDO,
+  assignedTableId: null,
+  calledAt: null,
+  toleranceMinutes: null,
   createdAt: new Date().toISOString()
 });
 
@@ -119,6 +131,7 @@ const createTable = ({ label, capacity, status }) => ({
   label,
   capacity,
   status,
+  currentCustomerId: null,
   createdAt: new Date().toISOString()
 });
 
@@ -155,6 +168,8 @@ const buildTableStatusOptions = (selectedStatus) => TABLE_STATUS_OPTIONS
   .map((status) => `<option value="${status}" ${selectedStatus === status ? 'selected' : ''}>${TABLE_STATUS_LABELS[status]}</option>`)
   .join('');
 
+const getTableById = (tableId) => tableRepository.list().find((table) => table.id === tableId);
+
 const getActiveQueueCustomers = () => waitlistRepository
   .list()
   .filter((customer) => customer.status === WAITLIST_STATUS.AGUARDANDO || customer.status === WAITLIST_STATUS.CHAMADO)
@@ -163,6 +178,22 @@ const getActiveQueueCustomers = () => waitlistRepository
 const getCompatibleCustomers = (tableCapacity) => getActiveQueueCustomers()
   .filter((customer) => customer.partySize <= tableCapacity)
   .sort((a, b) => b.partySize - a.partySize || new Date(a.createdAt) - new Date(b.createdAt));
+
+const getToleranceMinutes = () => {
+  const parsed = Number.parseInt(elements.callToleranceInput?.value || '', 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_CALL_TOLERANCE_MINUTES;
+};
+
+const formatCalledAt = (calledAt) => {
+  if (!calledAt) {
+    return '—';
+  }
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date(calledAt));
+};
 
 const updateQueueCounter = () => {
   const total = getActiveQueueCustomers().length;
@@ -193,6 +224,7 @@ const renderQueue = () => {
   elements.queueList.innerHTML = customers
     .map((customer) => {
       const notes = customer.notes?.trim() ? customer.notes : 'Sem observações';
+      const assignedTable = customer.assignedTableId ? getTableById(customer.assignedTableId) : null;
 
       return `
         <li class="queue-item" data-id="${customer.id}">
@@ -201,6 +233,8 @@ const renderQueue = () => {
             <p><strong>WhatsApp:</strong> ${customer.whatsapp}</p>
             <p><strong>Pessoas:</strong> ${customer.partySize}</p>
             <p><strong>Observações:</strong> ${notes}</p>
+            <p><strong>Mesa associada:</strong> ${assignedTable?.label || 'Não definida'}</p>
+            <p><strong>Horário da chamada:</strong> ${formatCalledAt(customer.calledAt)}</p>
           </div>
           <div class="queue-item-status">
             <label>
@@ -230,7 +264,10 @@ const renderTables = () => {
   }
 
   elements.tableList.innerHTML = tables
-    .map((table) => `
+    .map((table) => {
+      const customer = table.currentCustomerId ? waitlistRepository.list().find((item) => item.id === table.currentCustomerId) : null;
+
+      return `
       <li class="table-item" data-id="${table.id}">
         <div class="table-item-main">
           <h3>${table.label}</h3>
@@ -239,6 +276,7 @@ const renderTables = () => {
             <span class="status-pill">Capacidade ${table.capacity}</span>
           </div>
           <p>Status operacional da mesa no salão.</p>
+          <p><strong>Cliente associado:</strong> ${customer ? customer.name : 'Sem cliente associado'}</p>
         </div>
         <div class="table-actions">
           <label class="table-item-status">
@@ -250,7 +288,8 @@ const renderTables = () => {
           <button type="button" class="secondary-button" data-action="mark-released">Mesa liberada</button>
         </div>
       </li>
-    `)
+    `;
+    })
     .join('');
 
   updateTableCounter();
@@ -273,12 +312,25 @@ const renderHostPanel = () => {
       const suggestions = getCompatibleCustomers(table.capacity).slice(0, 3);
 
       const suggestionsMarkup = suggestions.length
-        ? `<ul class="suggestion-list">${suggestions.map((customer) => `
-            <li class="suggestion-item">
-              <span>${customer.name} · ${customer.partySize} pessoas</span>
-              <small>${customer.whatsapp}</small>
+        ? `<ul class="suggestion-list">${suggestions.map((customer) => {
+          const isCalledForThisTable = customer.status === WAITLIST_STATUS.CHAMADO && customer.assignedTableId === table.id;
+
+          return `
+            <li class="suggestion-item" data-customer-id="${customer.id}" data-table-id="${table.id}">
+              <div class="suggestion-content">
+                <span>${customer.name} · ${customer.partySize} pessoas</span>
+                <small>${customer.whatsapp}</small>
+                <small>Status: ${STATUS_LABELS[customer.status]}</small>
+              </div>
+              <div class="host-actions">
+                <button type="button" class="secondary-button" data-action="call-customer">Chamar cliente</button>
+                <button type="button" class="secondary-button" data-action="confirm-entry" ${isCalledForThisTable ? '' : 'disabled'}>Confirmar entrada</button>
+                <button type="button" class="danger-button" data-action="mark-no-show" ${isCalledForThisTable ? '' : 'disabled'}>Não compareceu</button>
+                <button type="button" class="danger-button" data-action="mark-canceled" ${isCalledForThisTable ? '' : 'disabled'}>Cancelado</button>
+              </div>
             </li>
-          `).join('')}</ul>`
+          `;
+        }).join('')}</ul>`
         : '<p class="suggestion-empty">Nenhum cliente compatível no momento.</p>';
 
       return `
@@ -398,7 +450,7 @@ const handleQueueInteraction = (event) => {
     return;
   }
 
-  waitlistRepository.updateStatus(listItem.dataset.id, target.value);
+  waitlistRepository.update(listItem.dataset.id, { status: target.value });
   renderAll();
 };
 
@@ -413,16 +465,74 @@ const handleTableInteraction = (event) => {
   const tableId = listItem.dataset.id;
 
   if (target instanceof HTMLSelectElement && target.dataset.action === 'update-table-status') {
-    tableRepository.updateStatus(tableId, target.value);
+    tableRepository.update(tableId, { status: target.value });
     renderAll();
     return;
   }
 
   if (target instanceof HTMLButtonElement && target.dataset.action === 'mark-released') {
-    tableRepository.updateStatus(tableId, TABLE_STATUS.DISPONIVEL);
+    tableRepository.update(tableId, { status: TABLE_STATUS.DISPONIVEL, currentCustomerId: null });
     notificationService.notifyTableReleased(tableId);
     renderAll();
+  }
+};
+
+const handleHostPanelInteraction = (event) => {
+  const target = event.target;
+
+  if (!(target instanceof HTMLButtonElement) || !target.dataset.action) {
     return;
+  }
+
+  const suggestionItem = target.closest('.suggestion-item');
+
+  if (!suggestionItem) {
+    return;
+  }
+
+  const customerId = suggestionItem.dataset.customerId;
+  const tableId = suggestionItem.dataset.tableId;
+  const customer = waitlistRepository.list().find((item) => item.id === customerId);
+  const table = tableRepository.list().find((item) => item.id === tableId);
+
+  if (!customer || !table) {
+    return;
+  }
+
+  if (target.dataset.action === 'call-customer') {
+    const toleranceMinutes = getToleranceMinutes();
+
+    waitlistRepository.update(customerId, {
+      status: WAITLIST_STATUS.CHAMADO,
+      assignedTableId: tableId,
+      calledAt: new Date().toISOString(),
+      toleranceMinutes
+    });
+
+    tableRepository.update(tableId, { currentCustomerId: customerId });
+    notificationService.notifyCustomerCalled({ customer, table, toleranceMinutes });
+    renderAll();
+    return;
+  }
+
+  if (target.dataset.action === 'confirm-entry') {
+    waitlistRepository.update(customerId, { status: WAITLIST_STATUS.ENTROU });
+    tableRepository.update(tableId, { status: TABLE_STATUS.OCUPADA, currentCustomerId: customerId });
+    renderAll();
+    return;
+  }
+
+  if (target.dataset.action === 'mark-no-show') {
+    waitlistRepository.update(customerId, { status: WAITLIST_STATUS.NAO_COMPARECEU, assignedTableId: null, calledAt: null });
+    tableRepository.update(tableId, { currentCustomerId: null });
+    renderAll();
+    return;
+  }
+
+  if (target.dataset.action === 'mark-canceled') {
+    waitlistRepository.update(customerId, { status: WAITLIST_STATUS.CANCELADO, assignedTableId: null, calledAt: null });
+    tableRepository.update(tableId, { currentCustomerId: null });
+    renderAll();
   }
 };
 
@@ -432,8 +542,10 @@ const initialize = () => {
   elements.queueList.addEventListener('change', handleQueueInteraction);
   elements.tableList.addEventListener('change', handleTableInteraction);
   elements.tableList.addEventListener('click', handleTableInteraction);
+  elements.hostPanel.addEventListener('click', handleHostPanelInteraction);
 
   elements.tableForm.status.value = TABLE_STATUS.DISPONIVEL;
+  elements.callToleranceInput.value = String(DEFAULT_CALL_TOLERANCE_MINUTES);
   renderAll();
 };
 
