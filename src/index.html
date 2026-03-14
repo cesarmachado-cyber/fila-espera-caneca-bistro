@@ -62,6 +62,23 @@
         <ul id="queue-list" class="queue-list" aria-live="polite"></ul>
       </section>
 
+      <section class="card" aria-labelledby="historico-titulo">
+        <div class="card-header card-header-inline">
+          <div>
+            <h2 id="historico-titulo">Histórico de atendimentos</h2>
+            <p>Pesquise clientes que já entraram, não compareceram ou foram cancelados.</p>
+          </div>
+          <a class="history-link" href="#history-search">Ir para pesquisa</a>
+        </div>
+
+        <label class="field" for="history-search">
+          <span>Pesquisar no histórico</span>
+          <input id="history-search" type="search" placeholder="Digite nome, WhatsApp ou status" />
+        </label>
+
+        <ul id="history-list" class="queue-list" aria-live="polite"></ul>
+      </section>
+
       <section class="card" aria-labelledby="cadastro-mesa-titulo">
         <div class="card-header">
           <h2 id="cadastro-mesa-titulo">Cadastro de mesas</h2>
