@@ -95,6 +95,17 @@ ul {
   padding: 8px 12px;
 }
 
+.history-link {
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.history-link:hover {
+  text-decoration: underline;
+}
+
 .waitlist-form {
   display: grid;
   gap: 16px;
@@ -245,6 +256,10 @@ textarea {
   grid-template-columns: 1fr auto;
   gap: 16px;
   align-items: center;
+}
+
+.queue-item-history {
+  grid-template-columns: 1fr;
 }
 
 .queue-item-main,

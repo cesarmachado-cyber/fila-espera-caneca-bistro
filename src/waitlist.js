@@ -320,6 +320,8 @@ const elements = {
   waitlistFeedback: document.querySelector('#form-feedback'),
   queueList: document.querySelector('#queue-list'),
   queueCounter: document.querySelector('#queue-counter'),
+  historySearch: document.querySelector('#history-search'),
+  historyList: document.querySelector('#history-list'),
   tableForm: document.querySelector('#table-form'),
   tableFeedback: document.querySelector('#table-feedback'),
   tableList: document.querySelector('#table-list'),
@@ -391,6 +393,30 @@ const getActiveQueueCustomers = () => waitlistRepository
   .filter((customer) => customer.status === WAITLIST_STATUS.AGUARDANDO || customer.status === WAITLIST_STATUS.CHAMADO)
   .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
+const getHistoryCustomers = () => waitlistRepository
+  .list()
+  .filter((customer) => customer.status !== WAITLIST_STATUS.AGUARDANDO && customer.status !== WAITLIST_STATUS.CHAMADO)
+  .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+const getHistorySearchTerm = () => (elements.historySearch?.value || '').trim().toLowerCase();
+
+const matchesHistorySearch = (customer, searchTerm) => {
+  if (!searchTerm) {
+    return true;
+  }
+
+  const values = [
+    customer.name,
+    customer.whatsapp,
+    customer.notes,
+    STATUS_LABELS[customer.status]
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase());
+
+  return values.some((value) => value.includes(searchTerm));
+};
+
 const getCompatibleCustomers = (tableCapacity) => getActiveQueueCustomers()
   .filter((customer) => customer.partySize <= tableCapacity)
   .sort((a, b) => b.partySize - a.partySize || new Date(a.createdAt) - new Date(b.createdAt));
@@ -427,9 +453,7 @@ const updateAvailableCounter = () => {
 };
 
 const renderQueue = () => {
-  const customers = waitlistRepository
-    .list()
-    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  const customers = getActiveQueueCustomers();
 
   if (customers.length === 0) {
     elements.queueList.innerHTML = '<li class="queue-empty">Nenhum cliente na fila no momento.</li>';
@@ -466,6 +490,39 @@ const renderQueue = () => {
     .join('');
 
   updateQueueCounter();
+};
+
+const renderHistory = () => {
+  const searchTerm = getHistorySearchTerm();
+  const customers = getHistoryCustomers().filter((customer) => matchesHistorySearch(customer, searchTerm));
+
+  if (customers.length === 0) {
+    const emptyMessage = searchTerm
+      ? 'Nenhum cliente encontrado para esse filtro.'
+      : 'Nenhum atendimento finalizado no momento.';
+
+    elements.historyList.innerHTML = `<li class="queue-empty">${emptyMessage}</li>`;
+    return;
+  }
+
+  elements.historyList.innerHTML = customers
+    .map((customer) => {
+      const notes = customer.notes?.trim() ? customer.notes : 'Sem observações';
+
+      return `
+        <li class="queue-item queue-item-history" data-id="${customer.id}">
+          <div class="queue-item-main">
+            <h3>${customer.name}</h3>
+            <p><strong>Status final:</strong> ${STATUS_LABELS[customer.status]}</p>
+            <p><strong>WhatsApp:</strong> ${customer.whatsapp}</p>
+            <p><strong>Pessoas:</strong> ${customer.partySize}</p>
+            <p><strong>Observações:</strong> ${notes}</p>
+            <p><strong>Horário da chamada:</strong> ${formatCalledAt(customer.calledAt)}</p>
+          </div>
+        </li>
+      `;
+    })
+    .join('');
 };
 
 const renderTables = () => {
@@ -567,6 +624,7 @@ const renderHostPanel = () => {
 
 const renderAll = () => {
   renderQueue();
+  renderHistory();
   renderTables();
   renderHostPanel();
 };
@@ -788,6 +846,7 @@ const initialize = async () => {
   elements.tableList.addEventListener('change', handleTableInteraction);
   elements.tableList.addEventListener('click', handleTableInteraction);
   elements.hostPanel.addEventListener('click', handleHostPanelInteraction);
+  elements.historySearch.addEventListener('input', renderHistory);
 
   elements.tableForm.status.value = TABLE_STATUS.DISPONIVEL;
   elements.callToleranceInput.value = String(DEFAULT_CALL_TOLERANCE_MINUTES);
